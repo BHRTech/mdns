@@ -1,9 +1,10 @@
 package mdns
 
 import (
+	"context"
+	"sync/atomic"
 	"testing"
 	"time"
-	"sync/atomic"
 )
 
 func TestServer_StartStop(t *testing.T) {
@@ -46,10 +47,10 @@ func TestServer_Lookup(t *testing.T) {
 	params := &QueryParam{
 		Service: "_foobar._tcp",
 		Domain:  "local",
-		Timeout: 50 * time.Millisecond,
 		Entries: entries,
 	}
-	err = Query(params)
+
+	err = Query(context.Background(), params)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}

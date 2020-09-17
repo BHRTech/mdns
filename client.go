@@ -1,11 +1,11 @@
 package mdns
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/miekg/dns"
 	"golang.org/x/net/ipv4"
@@ -36,7 +36,6 @@ func (s *ServiceEntry) complete() bool {
 type QueryParam struct {
 	Service             string               // Service to lookup
 	Domain              string               // Lookup domain, default "local"
-	Timeout             time.Duration        // Lookup timeout, default 1 second
 	Interface           *net.Interface       // Multicast interface to use
 	Entries             chan<- *ServiceEntry // Entries Channel
 	WantUnicastResponse bool                 // Unicast response desired, as per 5.4 in RFC
@@ -47,7 +46,6 @@ func DefaultParams(service string) *QueryParam {
 	return &QueryParam{
 		Service:             service,
 		Domain:              "local",
-		Timeout:             time.Second,
 		Entries:             make(chan *ServiceEntry),
 		WantUnicastResponse: false, // TODO(reddaly): Change this default.
 	}
@@ -57,7 +55,7 @@ func DefaultParams(service string) *QueryParam {
 // for a timeout before finishing the query. The results are streamed
 // to a channel. Sends will not block, so clients should make sure to
 // either read or buffer.
-func Query(params *QueryParam) error {
+func Query(ctx context.Context, params *QueryParam) error {
 	// Create a new client
 	client, err := newClient()
 	if err != nil {
@@ -76,19 +74,16 @@ func Query(params *QueryParam) error {
 	if params.Domain == "" {
 		params.Domain = "local"
 	}
-	if params.Timeout == 0 {
-		params.Timeout = time.Second
-	}
 
 	// Run the query
-	return client.query(params)
+	return client.query(ctx, params)
 }
 
 // Lookup is the same as Query, however it uses all the default parameters
-func Lookup(service string, entries chan<- *ServiceEntry) error {
+func Lookup(ctx context.Context, service string, entries chan<- *ServiceEntry) error {
 	params := DefaultParams(service)
 	params.Entries = entries
-	return Query(params)
+	return Query(ctx, params)
 }
 
 // Client provides a query interface that can be used to
@@ -203,7 +198,7 @@ func (c *client) setInterface(iface *net.Interface) error {
 }
 
 // query is used to perform a lookup and stream results
-func (c *client) query(params *QueryParam) error {
+func (c *client) query(ctx context.Context, params *QueryParam) error {
 	// Create the service name
 	serviceAddr := fmt.Sprintf("%s.%s.", trimDot(params.Service), trimDot(params.Domain))
 
@@ -234,8 +229,6 @@ func (c *client) query(params *QueryParam) error {
 	// Map the in-progress responses
 	inprogress := make(map[string]*ServiceEntry)
 
-	// Listen until we reach the timeout
-	finish := time.After(params.Timeout)
 	for {
 		select {
 		case resp := <-msgCh:
@@ -286,7 +279,7 @@ func (c *client) query(params *QueryParam) error {
 			// Check if this entry is complete
 			if inp.complete() {
 				copyInp := *inp // copy inp because we send it into another thread
-				                // which can cause data race
+				// which can cause data race
 				select {
 				case params.Entries <- &copyInp:
 				default:
@@ -300,7 +293,7 @@ func (c *client) query(params *QueryParam) error {
 					logf("[ERR] mdns: Failed to query instance %s: %v", inp.Name, err)
 				}
 			}
-		case <-finish:
+		case <-ctx.Done():
 			return nil
 		}
 	}
