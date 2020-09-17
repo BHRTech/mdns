@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"sync"
 
 	"github.com/miekg/dns"
 	"golang.org/x/net/ipv4"
@@ -56,12 +55,12 @@ func DefaultParams(service string) *QueryParam {
 // to a channel. Sends will not block, so clients should make sure to
 // either read or buffer.
 func Query(ctx context.Context, params *QueryParam) error {
+
 	// Create a new client
 	client, err := newClient()
 	if err != nil {
 		return err
 	}
-	defer client.Close()
 
 	// Set the multicast interface
 	if params.Interface != nil {
@@ -94,15 +93,12 @@ type client struct {
 
 	ipv4MulticastConn *net.UDPConn
 	ipv6MulticastConn *net.UDPConn
-
-	closed    bool
-	closedCh  chan struct{} // TODO(reddaly): This doesn't appear to be used.
-	closeLock sync.Mutex
 }
 
 // NewClient creates a new mdns Client that can be used to query
 // for records
 func newClient() (*client, error) {
+
 	// TODO(reddaly): At least attempt to bind to the port required in the spec.
 	// Create a IPv4 listener
 	uconn4, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
@@ -136,43 +132,8 @@ func newClient() (*client, error) {
 		ipv6MulticastConn: mconn6,
 		ipv4UnicastConn:   uconn4,
 		ipv6UnicastConn:   uconn6,
-		closedCh:          make(chan struct{}),
 	}
 	return c, nil
-}
-
-func (c *client) getIsClosed() bool {
-	c.closeLock.Lock()
-	defer c.closeLock.Unlock()
-	return c.closed
-}
-
-// Close is used to cleanup the client
-func (c *client) Close() error {
-	c.closeLock.Lock()
-	defer c.closeLock.Unlock()
-
-	if c.closed {
-		return nil
-	}
-	c.closed = true
-
-	close(c.closedCh)
-
-	if c.ipv4UnicastConn != nil {
-		c.ipv4UnicastConn.Close()
-	}
-	if c.ipv6UnicastConn != nil {
-		c.ipv6UnicastConn.Close()
-	}
-	if c.ipv4MulticastConn != nil {
-		c.ipv4MulticastConn.Close()
-	}
-	if c.ipv6MulticastConn != nil {
-		c.ipv6MulticastConn.Close()
-	}
-
-	return nil
 }
 
 // setInterface is used to set the query interface, uses sytem
@@ -199,19 +160,21 @@ func (c *client) setInterface(iface *net.Interface) error {
 
 // query is used to perform a lookup and stream results
 func (c *client) query(ctx context.Context, params *QueryParam) error {
+
 	// Create the service name
 	serviceAddr := fmt.Sprintf("%s.%s.", trimDot(params.Service), trimDot(params.Domain))
 
 	// Start listening for response packets
 	msgCh := make(chan *dns.Msg, 32)
-	go c.recv(c.ipv4UnicastConn, msgCh)
-	go c.recv(c.ipv6UnicastConn, msgCh)
-	go c.recv(c.ipv4MulticastConn, msgCh)
-	go c.recv(c.ipv6MulticastConn, msgCh)
+	go c.recv(ctx, c.ipv4UnicastConn, msgCh)
+	go c.recv(ctx, c.ipv6UnicastConn, msgCh)
+	go c.recv(ctx, c.ipv4MulticastConn, msgCh)
+	go c.recv(ctx, c.ipv6MulticastConn, msgCh)
 
 	// Send the query
 	m := new(dns.Msg)
 	m.SetQuestion(serviceAddr, dns.TypePTR)
+
 	// RFC 6762, section 18.12.  Repurposing of Top Bit of qclass in Question
 	// Section
 	//
@@ -221,7 +184,9 @@ func (c *client) query(ctx context.Context, params *QueryParam) error {
 	if params.WantUnicastResponse {
 		m.Question[0].Qclass |= 1 << 15
 	}
+
 	m.RecursionDesired = false
+
 	if err := c.sendQuery(m); err != nil {
 		return err
 	}
@@ -315,12 +280,12 @@ func (c *client) sendQuery(q *dns.Msg) error {
 }
 
 // recv is used to receive until we get a shutdown
-func (c *client) recv(l *net.UDPConn, msgCh chan *dns.Msg) {
+func (c *client) recv(ctx context.Context, l *net.UDPConn, msgCh chan *dns.Msg) {
 	if l == nil {
 		return
 	}
 	buf := make([]byte, 65536)
-	for !c.getIsClosed() {
+	for ctx.Err() == nil {
 		n, err := l.Read(buf)
 		if err != nil {
 			logf("[ERR] mdns: Failed to read packet: %v", err)
@@ -331,9 +296,10 @@ func (c *client) recv(l *net.UDPConn, msgCh chan *dns.Msg) {
 			logf("[ERR] mdns: Failed to unpack packet: %v", err)
 			continue
 		}
+
 		select {
 		case msgCh <- msg:
-		case <-c.closedCh:
+		case <-ctx.Done():
 			return
 		}
 	}
