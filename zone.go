@@ -21,8 +21,8 @@ type Zone interface {
 	Records(q dns.Question) []dns.RR
 }
 
-// MDNSService is used to export a named service by implementing a Zone
-type MDNSService struct {
+// Service is used to export a named service by implementing a Zone
+type Service struct {
 	Instance string   // Instance name (e.g. "hostService name")
 	Service  string   // Service name (e.g. "_http._tcp.")
 	Domain   string   // If blank, assumes "local"
@@ -36,7 +36,7 @@ type MDNSService struct {
 	enumAddr     string // _services._dns-sd._udp.<domain>
 }
 
-// validateFQDN returns an error if the passed string is not a fully qualified
+// ValidateFQDN returns an error if the passed string is not a fully qualified
 // hdomain name (more specifically, a hostname).
 func validateFQDN(s string) error {
 	if len(s) == 0 {
@@ -50,7 +50,7 @@ func validateFQDN(s string) error {
 	return nil
 }
 
-// NewMDNSService returns a new instance of MDNSService.
+// NewService returns a new instance of Service.
 //
 // If domain, hostName, or ips is set to the zero value, then a default value
 // will be inferred from the operating system.
@@ -60,7 +60,7 @@ func validateFQDN(s string) error {
 // check to ensure that the instance name does not conflict with other instance
 // names, and, if required, select a new name.  There may also be conflicting
 // hostName A/AAAA records.
-func NewMDNSService(instance, service, domain, hostName string, port int, ips []net.IP, txt []string) (*MDNSService, error) {
+func NewService(instance, service, domain, hostName string, port int, ips []net.IP, txt []string) (*Service, error) {
 	// Sanity check inputs
 	if instance == "" {
 		return nil, fmt.Errorf("missing service instance name")
@@ -114,7 +114,7 @@ func NewMDNSService(instance, service, domain, hostName string, port int, ips []
 		}
 	}
 
-	return &MDNSService{
+	return &Service{
 		Instance:     instance,
 		Service:      service,
 		Domain:       domain,
@@ -128,13 +128,13 @@ func NewMDNSService(instance, service, domain, hostName string, port int, ips []
 	}, nil
 }
 
-// trimDot is used to trim the dots from the start or end of a string
+// TrimDot is used to trim the dots from the start or end of a string
 func trimDot(s string) string {
 	return strings.Trim(s, ".")
 }
 
 // Records returns DNS records in response to a DNS question.
-func (m *MDNSService) Records(q dns.Question) []dns.RR {
+func (m *Service) Records(q dns.Question) []dns.RR {
 	switch q.Name {
 	case m.enumAddr:
 		return m.serviceEnum(q)
@@ -152,7 +152,7 @@ func (m *MDNSService) Records(q dns.Question) []dns.RR {
 	}
 }
 
-func (m *MDNSService) serviceEnum(q dns.Question) []dns.RR {
+func (m *Service) serviceEnum(q dns.Question) []dns.RR {
 	switch q.Qtype {
 	case dns.TypeANY:
 		fallthrough
@@ -172,8 +172,8 @@ func (m *MDNSService) serviceEnum(q dns.Question) []dns.RR {
 	}
 }
 
-// serviceRecords is called when the query matches the service name
-func (m *MDNSService) serviceRecords(q dns.Question) []dns.RR {
+// ServiceRecords is called when the query matches the service name
+func (m *Service) serviceRecords(q dns.Question) []dns.RR {
 	switch q.Qtype {
 	case dns.TypeANY:
 		fallthrough
@@ -203,8 +203,8 @@ func (m *MDNSService) serviceRecords(q dns.Question) []dns.RR {
 	}
 }
 
-// serviceRecords is called when the query matches the instance name
-func (m *MDNSService) instanceRecords(q dns.Question) []dns.RR {
+// ServiceRecords is called when the query matches the instance name
+func (m *Service) instanceRecords(q dns.Question) []dns.RR {
 	switch q.Qtype {
 	case dns.TypeANY:
 		// Get the SRV, which includes A and AAAA

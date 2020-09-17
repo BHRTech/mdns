@@ -9,12 +9,12 @@ import (
 	"github.com/miekg/dns"
 )
 
-func makeService(t *testing.T) *MDNSService {
+func makeService(t *testing.T) *Service {
 	return makeServiceWithServiceName(t, "_http._tcp")
 }
 
-func makeServiceWithServiceName(t *testing.T, service string) *MDNSService {
-	m, err := NewMDNSService(
+func makeServiceWithServiceName(t *testing.T, service string) *Service {
+	m, err := NewService(
 		"hostname",
 		service,
 		"local.",
@@ -30,24 +30,24 @@ func makeServiceWithServiceName(t *testing.T, service string) *MDNSService {
 	return m
 }
 
-func TestNewMDNSService_BadParams(t *testing.T) {
+func TestNewService_BadParams(t *testing.T) {
 	for _, test := range []struct {
 		testName string
 		hostName string
 		domain   string
 	}{
 		{
-			"NewMDNSService should fail when passed hostName that is not a legal fully-qualified domain name",
+			"NewService should fail when passed hostName that is not a legal fully-qualified domain name",
 			"hostname", // not legal FQDN - should be "hostname." or "hostname.local.", etc.
 			"local.",   // legal
 		},
 		{
-			"NewMDNSService should fail when passed domain that is not a legal fully-qualified domain name",
+			"NewService should fail when passed domain that is not a legal fully-qualified domain name",
 			"hostname.", // legal
 			"local",     // should be "local."
 		},
 	} {
-		_, err := NewMDNSService(
+		_, err := NewService(
 			"instance name",
 			"_http._tcp",
 			test.domain,
@@ -61,7 +61,7 @@ func TestNewMDNSService_BadParams(t *testing.T) {
 	}
 }
 
-func TestMDNSService_BadAddr(t *testing.T) {
+func TestService_BadAddr(t *testing.T) {
 	s := makeService(t)
 	q := dns.Question{
 		Name:  "random",
@@ -73,7 +73,7 @@ func TestMDNSService_BadAddr(t *testing.T) {
 	}
 }
 
-func TestMDNSService_ServiceAddr(t *testing.T) {
+func TestService_ServiceAddr(t *testing.T) {
 	s := makeService(t)
 	q := dns.Question{
 		Name:  "_http._tcp.local.",
@@ -109,7 +109,7 @@ func TestMDNSService_ServiceAddr(t *testing.T) {
 	}
 }
 
-func TestMDNSService_InstanceAddr_ANY(t *testing.T) {
+func TestService_InstanceAddr_ANY(t *testing.T) {
 	s := makeService(t)
 	q := dns.Question{
 		Name:  "hostname._http._tcp.local.",
@@ -133,7 +133,7 @@ func TestMDNSService_InstanceAddr_ANY(t *testing.T) {
 	}
 }
 
-func TestMDNSService_InstanceAddr_SRV(t *testing.T) {
+func TestService_InstanceAddr_SRV(t *testing.T) {
 	s := makeService(t)
 	q := dns.Question{
 		Name:  "hostname._http._tcp.local.",
@@ -159,7 +159,7 @@ func TestMDNSService_InstanceAddr_SRV(t *testing.T) {
 	}
 }
 
-func TestMDNSService_InstanceAddr_A(t *testing.T) {
+func TestService_InstanceAddr_A(t *testing.T) {
 	s := makeService(t)
 	q := dns.Question{
 		Name:  "hostname._http._tcp.local.",
@@ -178,7 +178,7 @@ func TestMDNSService_InstanceAddr_A(t *testing.T) {
 	}
 }
 
-func TestMDNSService_InstanceAddr_AAAA(t *testing.T) {
+func TestService_InstanceAddr_AAAA(t *testing.T) {
 	s := makeService(t)
 	q := dns.Question{
 		Name:  "hostname._http._tcp.local.",
@@ -201,7 +201,7 @@ func TestMDNSService_InstanceAddr_AAAA(t *testing.T) {
 	}
 }
 
-func TestMDNSService_InstanceAddr_TXT(t *testing.T) {
+func TestService_InstanceAddr_TXT(t *testing.T) {
 	s := makeService(t)
 	q := dns.Question{
 		Name:  "hostname._http._tcp.local.",
@@ -220,7 +220,7 @@ func TestMDNSService_InstanceAddr_TXT(t *testing.T) {
 	}
 }
 
-func TestMDNSService_HostNameQuery(t *testing.T) {
+func TestService_HostNameQuery(t *testing.T) {
 	s := makeService(t)
 	for _, test := range []struct {
 		q    dns.Question
@@ -257,7 +257,7 @@ func TestMDNSService_HostNameQuery(t *testing.T) {
 	}
 }
 
-func TestMDNSService_serviceEnum_PTR(t *testing.T) {
+func TestService_serviceEnum_PTR(t *testing.T) {
 	s := makeService(t)
 	q := dns.Question{
 		Name:  "_services._dns-sd._udp.local.",

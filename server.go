@@ -38,7 +38,7 @@ type Config struct {
 	Iface *net.Interface
 }
 
-// mDNS server is used to listen for mDNS queries and respond if we
+// Server is used to listen for mDNS queries and respond if we
 // have a matching local record
 type Server struct {
 	config *Config
@@ -106,7 +106,7 @@ func (s *Server) Shutdown() error {
 	return nil
 }
 
-// recv is a long running routine to receive packets from an interface
+// Recv is a long running routine to receive packets from an interface
 func (s *Server) recv(c *net.UDPConn) {
 	if c == nil {
 		return
@@ -123,7 +123,7 @@ func (s *Server) recv(c *net.UDPConn) {
 	}
 }
 
-// parsePacket is used to parse an incoming packet
+// ParsePacket is used to parse an incoming packet
 func (s *Server) parsePacket(packet []byte, from net.Addr) error {
 	var msg dns.Msg
 	if err := msg.Unpack(packet); err != nil {
@@ -133,7 +133,7 @@ func (s *Server) parsePacket(packet []byte, from net.Addr) error {
 	return s.handleQuery(&msg, from)
 }
 
-// handleQuery is used to handle an incoming query
+// HandleQuery is used to handle an incoming query
 func (s *Server) handleQuery(query *dns.Msg, from net.Addr) error {
 	if query.Opcode != dns.OpcodeQuery {
 		// "In both multicast query and multicast response messages, the OPCODE MUST
@@ -242,7 +242,7 @@ func (s *Server) handleQuery(query *dns.Msg, from net.Addr) error {
 	return nil
 }
 
-// handleQuestion is used to handle an incoming question
+// HandleQuestion is used to handle an incoming question
 //
 // The response to a question may be transmitted over multicast, unicast, or
 // both.  The return values are DNS records for each transmission type.
@@ -270,7 +270,7 @@ func (s *Server) handleQuestion(q dns.Question) (multicastRecs, unicastRecs []dn
 	return records, nil
 }
 
-// sendResponse is used to send a response packet
+// SendResponse is used to send a response packet
 func (s *Server) sendResponse(resp *dns.Msg, from net.Addr, unicast bool) error {
 	// TODO(reddaly): Respect the unicast argument, and allow sending responses
 	// over multicast.
@@ -284,8 +284,8 @@ func (s *Server) sendResponse(resp *dns.Msg, from net.Addr, unicast bool) error 
 	if addr.IP.To4() != nil {
 		_, err = s.ipv4List.WriteToUDP(buf, addr)
 		return err
-	} else {
-		_, err = s.ipv6List.WriteToUDP(buf, addr)
-		return err
 	}
+
+	_, err = s.ipv6List.WriteToUDP(buf, addr)
+	return err
 }
