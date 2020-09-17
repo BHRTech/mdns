@@ -11,6 +11,10 @@ import (
 	"golang.org/x/net/ipv6"
 )
 
+const (
+	receiveBuffer = 65536
+)
+
 // ServiceEntry is returned after we query for a service
 type ServiceEntry struct {
 	Name       string
@@ -105,6 +109,7 @@ func newClient() (*client, error) {
 	if err != nil {
 		logf("[ERR] mdns: Failed to bind to udp4 port: %v", err)
 	}
+
 	uconn6, err := net.ListenUDP("udp6", &net.UDPAddr{IP: net.IPv6zero, Port: 0})
 	if err != nil {
 		logf("[ERR] mdns: Failed to bind to udp6 port: %v", err)
@@ -143,18 +148,22 @@ func (c *client) setInterface(iface *net.Interface) error {
 	if err := p.SetMulticastInterface(iface); err != nil {
 		return err
 	}
+
 	p2 := ipv6.NewPacketConn(c.ipv6UnicastConn)
 	if err := p2.SetMulticastInterface(iface); err != nil {
 		return err
 	}
+
 	p = ipv4.NewPacketConn(c.ipv4MulticastConn)
 	if err := p.SetMulticastInterface(iface); err != nil {
 		return err
 	}
+
 	p2 = ipv6.NewPacketConn(c.ipv6MulticastConn)
 	if err := p2.SetMulticastInterface(iface); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -284,13 +293,17 @@ func (c *client) recv(ctx context.Context, l *net.UDPConn, msgCh chan *dns.Msg) 
 	if l == nil {
 		return
 	}
-	buf := make([]byte, 65536)
+
+	buf := make([]byte, receiveBuffer)
+
 	for ctx.Err() == nil {
+
 		n, err := l.Read(buf)
 		if err != nil {
 			logf("[ERR] mdns: Failed to read packet: %v", err)
-			continue
+			return
 		}
+
 		msg := new(dns.Msg)
 		if err := msg.Unpack(buf[:n]); err != nil {
 			logf("[ERR] mdns: Failed to unpack packet: %v", err)
@@ -310,10 +323,13 @@ func ensureName(inprogress map[string]*ServiceEntry, name string) *ServiceEntry 
 	if inp, ok := inprogress[name]; ok {
 		return inp
 	}
+
 	inp := &ServiceEntry{
 		Name: name,
 	}
+
 	inprogress[name] = inp
+
 	return inp
 }
 
